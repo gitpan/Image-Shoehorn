@@ -52,7 +52,7 @@ When I asked the Dict servers for a definition of "tailor", it returned a WordNe
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.2';
+$Image::Shoehorn::VERSION = '1.3';
 
 use File::Basename;
 use Error;
@@ -114,6 +114,35 @@ sub converted_name {
   $converted    =~ s/^(.*)\.([^\.]+)$/$1\.$args->[1]/;
 
   return $converted;
+}
+
+=head2 __PACKAGE__->scaled_dimensions([$cur_x,$cur_y,$new_x,$new_y])
+
+=cut
+
+sub scaled_dimensions {
+  my $pkg    = shift;
+  my $width  = $_[0]->[0];
+  my $height = $_[0]->[1];
+  my $x      = $_[0]->[2] || $width;
+  my $y      = $_[0]->[3] || $height;
+
+  if (($width == $x) && ($height == $y)) {
+    return ($x,$y);
+  }
+
+  my $h_percentage = $y / $height;
+  my $w_percentage = $x / $width;
+  my $percentage   = 100;
+  
+  if (($x)  && ($y )) { $percentage = ($h_percentage <= $w_percentage) ? $h_percentage : $w_percentage; }
+  if (($x)  && (!$y)) { $percentage = $w_percentage; }
+  if ((!$x) && ($y )) { $percentage = $h_percentage; }
+  
+  $x = int($width  * $percentage);
+  $y = int($height * $percentage);
+  
+  return ($x,$y);
 }
 
 =head1 OBJECT METHODS
@@ -434,6 +463,7 @@ sub import {
       }
     }
 
+    map { shift; } @{$self->_magick()};
     return $self->{'__images'};
 }
 
@@ -468,7 +498,7 @@ sub _process {
 
     #
 
-    my ($x,$y) = $self->_dimensions([
+    my ($x,$y) = __PACKAGE__->scaled_dimensions([
 				     $self->{'__images'}{'source'}{'width'},
 				     $self->{'__images'}{'source'}{'height'},
 				     $args->{'max_width'},
@@ -584,11 +614,11 @@ sub _scale {
   }
   
   elsif ($args->{'scale'} =~ /^(\d+)x$/) {
-    ($width,$height) = $self->_dimensions([$width,$height,$1,undef]);
+    ($width,$height) = __PACKAGE__->scaled_dimensions([$width,$height,$1,undef]);
   }
   
   elsif ($args->{'scale'} =~ /^x(\d+)$/) {
-    ($width,$height) = $self->_dimensions([$width,$height,undef,$1]);
+    ($width,$height) = __PACKAGE__->scaled_dimensions([$width,$height,undef,$1]);
   }
   
   else { 
@@ -652,35 +682,6 @@ sub _shoehorn {
   #
 
   return ($self->_magick()->Get("width"),$self->_magick()->Get("height"));
-}
-
-# =head2 $pkg->_dimensions(\@args)
-#
-# =cut
-
-sub _dimensions {
-  my $self   = shift;
-  my $width  = $_[0]->[0];
-  my $height = $_[0]->[1];
-  my $x      = $_[0]->[2] || $width;
-  my $y      = $_[0]->[3] || $height;
-
-  if (($width == $x) && ($height == $y)) {
-    return ($x,$y);
-  }
-
-  my $h_percentage = $y / $height;
-  my $w_percentage = $x / $width;
-  my $percentage   = 100;
-  
-  if (($x)  && ($y )) { $percentage = ($h_percentage <= $w_percentage) ? $h_percentage : $w_percentage; }
-  if (($x)  && (!$y)) { $percentage = $w_percentage; }
-  if ((!$x) && ($y )) { $percentage = $h_percentage; }
-  
-  $x = int($width  * $percentage);
-  $y = int($height * $percentage);
-  
-  return ($x,$y);
 }
 
 # =head2 $pkg->_read($file)
@@ -783,11 +784,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.2
+1.3
 
 =head1 DATE
 
-June 17, 2002
+July 08, 2002
 
 =head1 AUTHOR
 

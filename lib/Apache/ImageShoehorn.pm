@@ -20,6 +20,8 @@ Apache::ImageShoehorn - mod_perl wrapper for Image::Shoehorn
    PerlSetVar   SetValid        png
    PerlSetVar   Convert         On
 
+   PerlSetVar   ScaleAllOnCleanup  Off
+
    <FilesMatch "\.html$">
     # Do something with HTML files here
    </FilesMatch>
@@ -70,6 +72,12 @@ Convert        I<(On|Off)>
 
 If an image fails a validity test, then the image will be be converted using the first type defined by the I<SetValid> configs that the package (read: Image::Magick) can understand.
 
+=item *
+
+ScaleAllOnCleanup   I<(On|Off)>
+
+Toggle setting for scaling all size definitions for an image during the cleanup phase of a request. Default is "On".
+
 =back
 
 This package does not support all of the options available to the I<Image::Shoehorn> constructor. They will likely be added in later releases. The current list of unsupported configuration options is :
@@ -95,7 +103,7 @@ I<overwrite>
 package Apache::ImageShoehorn;
 use strict;
 
-$Apache::ImageShoehorn::VERSION = '0.9.1';
+$Apache::ImageShoehorn::VERSION = '0.9.2';
 
 use Apache;
 use Apache::Constants qw (:common);
@@ -143,6 +151,10 @@ sub handler {
     my %params = ($apache->method() eq "POST") ? $apache->content() : $apache->args();
     my $sname  = $params{"scale"};
 
+    if (! $sname) {
+      return DECLINED;
+    }
+
     # If we're neither scaling nor converting an
     # image, our work here is done. These are not
     # the droids we are looking for.
@@ -150,7 +162,7 @@ sub handler {
     my $scale = $apache->dir_config("SetScale".(ucfirst $sname));
 
     if (($sname) && (! $scale)) { 
-      return NOT_FOUND; 
+      return NOT_FOUND;
     }
 
     # What is the name of the file we're dealing with?
@@ -208,7 +220,10 @@ sub handler {
 
       if ($convert) { $source = $converted; }
 
-      $apache->register_cleanup(sub { &_scaleall($apache,undef,$source,$mtime); });
+      unless ($apache->dir_config("ScaleAllOnCleanup") =~ /off/i) {
+	$apache->register_cleanup(sub { &_scaleall($apache,undef,$source,$mtime); });
+      }
+
       return &_send($apache,{path=>$scaled});
     }
 
@@ -232,7 +247,9 @@ sub handler {
 
     # Fly away!
 
-    $apache->register_cleanup(sub { &_scaleall($apache,$shoehorn,$imgs->{'source'}->{'path'},$mtime); });
+    unless ($apache->dir_config("ScaleAllOnCleanup") =~ /off/i) {
+      $apache->register_cleanup(sub { &_scaleall($apache,$shoehorn,$imgs->{'source'}->{'path'},$mtime); });
+    }
 
     # Note the $sname || "source" conditional.
     # If we're sending the actual source file,
@@ -395,11 +412,11 @@ sub _modified {
 
 =head1 VERSION
 
-0.9.1
+0.9.2
 
 =head1 DATE
 
-June 17, 2002
+July 07, 2002
 
 =head1 AUTHOR
 
