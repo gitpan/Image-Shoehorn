@@ -1,5 +1,9 @@
 Revision history for Perl extension Image::Shoehorn
 
+1.4	Sun Jul 21 2002
+
+	- Added "dimensions_for_scale" package method; originally part of &_scale()
+
 1.3	Mon Jul 08 2002
 
 	- Made $pkg->_dimensions a package method name scaled_dimensions in Image::Shoehorn

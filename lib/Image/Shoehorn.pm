@@ -52,7 +52,7 @@ When I asked the Dict servers for a definition of "tailor", it returned a WordNe
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.3';
+$Image::Shoehorn::VERSION = '1.4';
 
 use File::Basename;
 use Error;
@@ -80,6 +80,41 @@ sub last_error {
   }
   
   return Error->prior();
+}
+
+=head2 __PACKAGE__->dimensions_for_scale($x,$y,$scale)
+
+=cut
+
+sub dimensions_for_scale {
+  my $pkg   = shift;
+  my $x     = shift;
+  my $y     = shift;
+  my $scale = shift;
+
+  if ($scale =~ /^(\d+)x(\d+)$/) {
+    $x = $1;
+    $y = $2;
+  }
+  
+  elsif ($scale =~ /^(\d+)%$/) {
+    $x = ($x/100) * $1;
+    $y  = ($y/100) * $1;
+  }
+  
+  elsif ($scale =~ /^(\d+)x$/) {
+    ($x,$y) = __PACKAGE__->scaled_dimensions([$x,$y,$1,undef]);
+  }
+  
+  elsif ($scale =~ /^x(\d+)$/) {
+    ($x,$y) = __PACKAGE__->scaled_dimensions([$x,$y,undef,$1]);
+  }
+  
+  else { 
+    return ();
+  }
+
+  return (int($x),int($y));
 }
 
 =head2 Image::Shoehorn->scaled_name([$source,$scale])
@@ -600,29 +635,15 @@ sub _scale {
     $scaled = __PACKAGE__->converted_name([$scaled,$args->{'type'}]);
   }
 
-  my $width  = $self->{'__images'}{'source'}->{'width'};
-  my $height = $self->{'__images'}{'source'}->{'height'};
+  my ($width,$height) = __PACKAGE__->dimensions_for_scale(
+							  $self->{'__images'}{'source'}->{'width'},
+							  $self->{'__images'}{'source'}->{'height'},
+							  $args->{'scale'},
+							 );
 
-  if ($args->{'scale'} =~ /^(\d+)x(\d+)$/) {
-    $width  = $1;
-    $height = $2;
-  }
-  
-  elsif ($args->{'scale'} =~ /^(\d+)%$/) {
-    $height = ($height/100) * $1;
-    $width  = ($width/100) * $1;
-  }
-  
-  elsif ($args->{'scale'} =~ /^(\d+)x$/) {
-    ($width,$height) = __PACKAGE__->scaled_dimensions([$width,$height,$1,undef]);
-  }
-  
-  elsif ($args->{'scale'} =~ /^x(\d+)$/) {
-    ($width,$height) = __PACKAGE__->scaled_dimensions([$width,$height,undef,$1]);
-  }
-  
-  else { 
-    return (undef,"not a valid scale format, $args->{'scale'}");
+  if ((! $width) || (! $height)) {
+    $self->last_error("Unable to determine dimensions for '$args->{scale}'");
+    return 0;
   }
   
   my ($x,$y) = $self->_shoehorn({
@@ -784,11 +805,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.3
+1.4
 
 =head1 DATE
 
-July 08, 2002
+July 21, 2002
 
 =head1 AUTHOR
 
