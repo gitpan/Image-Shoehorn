@@ -4,4 +4,4 @@ lib/Apache/ImageShoehorn.pm
 lib/Image/Shoehorn.pm
 Makefile.PL
 MANIFEST
-test.pl
+t/import.t

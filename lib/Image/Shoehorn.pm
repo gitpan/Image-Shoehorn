@@ -27,32 +27,52 @@ Image::Shoehorn - massage the dimensions and filetype of an image
 
 =head1 DESCRIPTION
 
-Image::Shoehorn will massage the dimensions and filetype of an image, optionally creating one or more "scaled" copies.
+Image::Shoehorn will massage the dimensions and filetype of an image,
+optionally creating one or more "scaled" copies.
 
-It uses Image::Magick to do the heavy lifting and provides a single "import" objet method to hide a number of tasks from the user.
+It uses Image::Magick to do the heavy lifting and provides a single
+"import" objet method to hide a number of tasks from the user.
 
 =head1 RATIONALE
 
-Just before I decided to submit this package to the CPAN, I noticed that Lee Goddard had just released Image::Magick::Thumbnail. Although there is a certain amount of overlap, creating thumbnails is only a part of the functionality of Image::Shoehorn.
+Just before I decided to submit this package to the CPAN, I noticed that
+Lee Goddard had just released Image::Magick::Thumbnail. Although there is
+a certain amount of overlap, creating thumbnails is only a part of the 
+functionality of Image::Shoehorn.
 
-Image::Shoehorn is designed for taking a single image, optionally converting it's file type and resizing it, and then creating one or more "scaled" versions of the (modified) image.
+Image::Shoehorn is designed for taking a single image, optionally converting
+its file type and resizing it, and then creating one or more "scaled" 
+versions of the (modified) image.
 
-One example would be a photo-gallery application where the gallery may define (n) number of scaled versions. In a mod_perl context, if the scaled image had not already been created, the application might create the requested image for the request and then register a cleanup handler to create the remaining "scaled" versions. Additionally, scaled images may be defined as "25%", "x50", "200x" or "25x75" (Apache::Image::Shoehorn is next...)
+One example would be a photo-gallery application where the gallery may define
+(n) number of scaled versions. In a mod_perl context, if the scaled image had
+not already been created, the application might create the requested image
+for the request and then register a cleanup handler to create the remaining 
+"scaled" versions. Additionally, scaled images may be defined as "25%", "x50", 
+"200x" or "25x75" (Apache::Image::Shoehorn is next...)
 
 =head1 SHOEHORN ?!
 
-This package started life as Image::Import; designed to slurp and munge images into a database. It's not a very exciting name and, further, is a bit ambiguous. 
+This package started life as Image::Import; designed to slurp and munge images 
+into a database. It's not a very exciting name and, further, is a bit ambiguous. 
 
-So, I started fishing around for a better name and for a while I was thinking about Image::Tailor - a module for taking in the "hem" of an image, of fussing and making an image fit properly.
+So, I started fishing around for a better name and for a while I was thinking 
+about Image::Tailor - a module for taking in the "hem" of an image, of fussing 
+and making an image fit properly.
 
-When I asked the Dict servers for a definition of "tailor", it returned a WordNet entry containing the definition I<make fit for a specific purpose [syn: {shoehorn}]> and that was that.
+When I asked the Dict servers for a definition of "tailor", it returned a 
+WordNet entry containing the definition...
+
+ make fit for a specific purpose [syn: {shoehorn}]
+
+..and that was that.
 
 =cut
 
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.41';
+$Image::Shoehorn::VERSION = '1.42';
 
 use File::Basename;
 
@@ -61,11 +81,14 @@ use Error;
 
 # use Data::Dumper;
 
-use Image::Magick 5.45;
+use Image::Magick 5.44;
+use File::MMagic;
 
 =head1 PACKAGE METHODS
 
-=head2 Image::Shoehorn->last_error()
+=cut
+
+=head2 __PACKAGE__->last_error()
 
 Returns the last error recorded by the object.
 
@@ -119,7 +142,7 @@ sub dimensions_for_scale {
   return (int($x),int($y));
 }
 
-=head2 Image::Shoehorn->scaled_name([$source,$scale])
+=head2 __PACKAGE__->scaled_name([$source,$scale])
 
 =cut
 
@@ -137,7 +160,7 @@ sub scaled_name {
   return $scaled;
 }
 
-=head2 Image::Shoehorn->converted_name([$source,$type])
+=head2 __PACKAGE__->converted_name([$source,$type])
 
 =cut
 
@@ -195,13 +218,11 @@ sub scaled_dimensions {
   return ($x,$y);
 }
 
-=head1 OBJECT METHODS
-
-=head2 $pkg = Image::Shoehorn->new(\%args)
+=head2 $pkg = __PACKAGE__->new(\%args)
 
 Object constructor. Valid arguments are :
 
-=over
+=over 4
 
 =item *
 
@@ -217,37 +238,44 @@ B<cleanup>
 
 Code reference.
 
-By default, any new images that are created, in the tmp directory, are deleted when a different image is imported or when the I<Image::Shoehorn::DESTROY> method is invoked.
+By default, any new images that are created, in the tmp directory, are deleted 
+when a different image is imported or when the I<Image::Shoehorn::DESTROY> 
+method is invoked.
 
-You may optionally provide your own cleanup method which will be called in place.
+You may optionally provide your own cleanup method which will be called in 
+place.
 
-Your method will be passed a hash reference where the keys are "source" and any other names you may define in the I<scale> parameter of the I<import> object method. Each key points to a hash reference whose keys are :
+Your method will be passed a hash reference where the keys are "source" and 
+any other names you may define in the I<scale> parameter of the I<import> 
+object method. Each key points to a hash reference whose keys are :
 
-=over
+=over 4
 
-=item
+=item *
 
 I<path>
 
-=item
+=item *
 
 I<width>
 
-=item
+=item *
 
 I<height>
 
-=item 
+=item *
 
 I<format>
 
-=item
+=item *
 
 I<type>
 
 =back
 
-Note that this method will only affect B<new> images. The original source file may be altered, if it is imported with the I<overwrite> parameter, but will not be deleted.
+Note that this method will only affect B<new> images. The original source file 
+may be altered, if it is imported with the I<overwrite> parameter, but will 
+not be deleted.
 
 =back
 
@@ -292,11 +320,15 @@ sub init {
     return 1;
 }
 
-=head2 $pkg->import(\%args)
+=head1 OBJECT METHODS
+
+=cut
+
+=head2 $obj->import(\%args)
 
 Valid arguments are :
 
-=over
+=over 4
 
 =item *
 
@@ -304,7 +336,10 @@ B<source>
 
 String.
 
-The path to the image you are trying to import. If ImageMagick can read, you can import it. I<Required>
+The path to the image you are trying to import. If ImageMagick can read it, 
+you can import it. 
+
+I<Required>
 
 =item *
 
@@ -312,7 +347,8 @@ B<max_width>
 
 Int.
 
-The maximum width that the image you are importing may be. Height is scaled accordingly.
+The maximum width that the image you are importing may be. Height is scaled 
+accordingly.
 
 =item *
 
@@ -320,7 +356,8 @@ B<max_height>
 
 Int. 
 
-The maximum height that the image you are importing may be. Width is scaled accordingly.
+The maximum height that the image you are importing may be. Width is scaled 
+accordingly.
 
 =item *
 
@@ -328,33 +365,38 @@ B<scale>
 
 Hash reference. 
 
-One or more key-value pairs that define scaling dimensions for creating multiple instances of the current image. 
+One or more key-value pairs that define scaling dimensions for creating 
+multiple instances of the current image. 
 
-The key is a human readable label because humans are simple that way. The key may be anything you'd like B<except> "source" which is reserved for the image the object is munging.
+The key is a human readable label because humans are simple that way. The 
+key may be anything you'd like B<except> "source" which is reserved for the 
+image the object is munging.
 
 The value for a given key is the dimension flag which may be represented as :
 
-=over
+=over 4
 
-=item
+=item *
 
 B<n>%
 
-=item 
+=item *
 
 B<n>xB<n>
 
-=item 
+=item *
 
 xB<n>
 
-=item 
+=item *
 
 B<n>x
 
 =back
 
-Note that images are scaled B<after> the original source file may have been resized according to the I<max_height>, I<max_width> flags and I<convert> flags.
+Note that images are scaled B<after> the original source file may have been 
+resized according to the I<max_height>, I<max_width> flags and I<convert> 
+flags.
 
 Scaled images are created in the I<tmp_dir> defined in the object constructor.
 
@@ -372,7 +414,10 @@ B<convert>
 
 Boolean. 
 
-If this value is true and the source does not a valid file-type, the method will create a temporary file attempt to convert it to one of the specified valid file-types. The method will try to convert in the order the valid file-types are specified, stopping on success.
+If this value is true and the source does not a valid file-type, the method 
+will create a temporary file attempt to convert it to one of the specified 
+valid file-types. The method will try to convert in the order the valid 
+file-types are specified, stopping on success.
 
 =item *
 
@@ -380,7 +425,9 @@ B<cleanup>
 
 Code reference.
 
-Define a per instance cleanup function for an image. This functions exactly the same way that a cleanup function defined in the object constructor does, except that it is forgotten as soon as a new image is imported.
+Define a per instance cleanup function for an image. This functions exactly 
+the same way that a cleanup function defined in the object constructor does, 
+except that it is forgotten as soon as a new image is imported.
 
 =item *
 
@@ -388,35 +435,51 @@ B<overwrite>
 
 Boolean. 
 
-Indicates whether or not to preserve the source file. By default, the package will B<not> perform munging on the source file itself and will instead create a new file in the I<tmp_dir> defined in the object constructor.
+Indicates whether or not to preserve the source file. By default, the package 
+will B<not> perform munging on the source file itself and will instead create 
+a new file in the I<tmp_dir> defined in the object constructor.
 
 =back
 
-Returns a hash reference with information for the source image -- note that this may or may not be the input document, but the newly converted/resized image created in you tmp directory -- and any scaled images you may have defined.
+Returns a hash reference with information for the source image -- note that 
+this may or may not be the input document, but the newly converted/resized 
+image created in you tmp directory -- and any scaled images you may have 
+defined.
 
-The keys of the hash are human readable names. The values are hash references whose keys are :
+The keys of the hash are human readable names. The values are hash references 
+whose keys are :
 
-=over
+=over 4
 
-=item 
+=item *
 
 I<path>
 
-=item
+=item *
 
 I<height>
 
-=item
+=item *
 
 I<width>
 
-=item
+=item *
+
+I<extension>
+
+=item *
+
+I<contenttype>
+
+=item *
+
+I<format>
+
+=item *
 
 I<type>
 
-=item
-
-I<format>
+Deprecated in favour or I<extension>
 
 =back
 
@@ -517,7 +580,7 @@ sub import {
     return $self->{'__images'};
 }
 
-# =head2 $pkg->_process(\%args)
+# =head2 $obj->_process(\%args)
 #
 # =cut
 
@@ -598,9 +661,10 @@ sub _process {
     return 1;
 }
 
-# =head2 $pkg->_validate(\@valid)
+# =head2 $obj->_validate(\@valid)
 #
-# Returns an array ref containing a boolean (is valid type) and a possible type for conversion
+# Returns an array ref containing a boolean (is valid type) and a possible 
+# type for conversion
 # 
 # =cut
 
@@ -633,7 +697,7 @@ sub _validate {
   return $self->{'__validation'};
 }
 
-# =head2 $pkg->_scale($name,$scale)
+# =head2 $obj->_scale($name,$scale)
 #
 # =cut
 
@@ -675,7 +739,7 @@ sub _scale {
   return 1
 }
 
-# =head2 $pkg->_shoehorn(\%args)
+# =head2 $obj->_shoehorn(\%args)
 #
 # =cut
 
@@ -720,7 +784,7 @@ sub _shoehorn {
   return ($self->_magick()->Get("width"),$self->_magick()->Get("height"));
 }
 
-# =head2 $pkg->_read($file)
+# =head2 $obj->_read($file)
 #
 # =cut
 
@@ -737,7 +801,7 @@ sub _read {
   return 1;
 }
 
-# =head2 $pkg->_ping($file)
+# =head2 $obj->_ping($file)
 #
 # =cut
 
@@ -754,15 +818,17 @@ sub _ping {
   my $extension = $2;
   
   return {
-	  width  => $self->_magick()->Get("width"),
-	  height => $self->_magick()->Get("height"),
-	  path   => $file,
-	  format => $self->_magick()->Get("format"),
-	  type   => $extension,
+	  width       => $self->_magick()->Get("width"),
+	  height      => $self->_magick()->Get("height"),
+	  path        => $file,
+	  format      => $self->_magick()->Get("format"),
+	  type        => $extension,
+	  extension   => $extension,
+          contenttype => $self->_mmagic()->checktype_filename($file),
 	 };
 }
 
-# =head2 $pkg->_cleanup()
+# =head2 $obj->_cleanup()
 #
 # =cut
 
@@ -794,7 +860,23 @@ sub _cleanup {
   return 1;
 }
 
-# =head2 $pkg->_magick()
+# =head2 $obj->_mmagic()
+#
+# Returns a File::MMagic object
+#
+# -cut
+
+sub _mmagic {
+    my $self = shift;
+
+    if (ref($self->{'__mmagic'}) ne "File::MMagic") {
+        $self->{'__mmagic'} = File::MMagic->new();
+    }
+
+    return $self->{'__mmagic'};
+}
+
+# =head2 $obj->_magick()
 #
 # =cut
 
@@ -808,7 +890,7 @@ sub _magick {
     return $self->{'__magick'};
 }
 
-# =head2 $pkg->DESTROY()
+# =head2 $obj->DESTROY()
 #
 # =cut
 
@@ -820,11 +902,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.41
+1.42
 
 =head1 DATE
 
-August 01, 2002
+$Date: 2003/05/30 22:51:06 $
 
 =head1 AUTHOR
 
@@ -832,11 +914,12 @@ Aaron Straup Cope
 
 =head1 TO DO
 
-=over
+=over 4
 
 =item *
 
-Modify constructor to accept all the options defined in the I<import> method as defaults.
+Modify constructor to accept all the options defined in the I<import> 
+method as defaults.
 
 =item *
 
@@ -856,9 +939,10 @@ L<Image::Magick::Thumbnail>
 
 =head1 LICENSE
 
-Copyright (c) 2001-2002, Aaron Straup Cope. All Rights Reserved.
+Copyright (c) 2001-2003, Aaron Straup Cope. All Rights Reserved.
 
-This is free software, you may use it and distribute it under the same terms as Perl itself.
+This is free software, you may use it and distribute it under the same
+terms as Perl itself.
 
 =cut
 
