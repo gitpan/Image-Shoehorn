@@ -1,5 +1,13 @@
 Revision history for Perl extension Image::Shoehorn
 
+1.1	Mon Jun 10 2002
+
+	- Added Apache::ImageShoehorn
+
+	- Added Image::Shoehorn->scaled_name package method
+
+	- Updated POD
+ 
 1.0	Tue Jun 06 2002
 
 	- Initial revision

@@ -52,7 +52,7 @@ When I asked the Dict servers for a definition of "tailor", it returned a WordNe
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.0';
+$Image::Shoehorn::VERSION = '1.1';
 
 use File::Basename;
 
@@ -63,7 +63,7 @@ use Image::Magick 5.45;
 
 =head1 PACKAGE METHODS
 
-=head2 $pkg->last_error()
+=head2 Image::Shoehorn->last_error()
 
 Returns the last error recorded by the object.
 
@@ -80,6 +80,22 @@ sub last_error {
   }
   
   return Error->prior();
+}
+
+=head2 Image::Shoehorn->scaled_name([$source,$scale])
+
+=cut
+
+sub scaled_name {
+  my $pkg  = shift;
+  my $args = shift;
+
+  my $scaled = &basename($args->[0]);
+
+  $scaled =~ s/(.*)(\.[^\.]+)$/$1-$args->[1]$2/;
+  $scaled =~ s/%/percent/;
+
+  return $scaled;
 }
 
 =head1 OBJECT METHODS
@@ -505,9 +521,9 @@ sub _scale {
   my $self = shift;
   my $args = shift;
 
-  my $scaled = &basename($self->{'__dest'});
+  my $scaled = __PACKAGE__->scaled_name([$self->{'__dest'},
+					 $args->{'name'}]);
 
-  $scaled =~ s/(.*)(\.[a-z]+)$/$1-$args->{'name'}$2/;
   $scaled = "$self->{'__tmpdir'}/$scaled";
 
   if ($args->{'type'}) {
@@ -727,11 +743,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.0
+1.1
 
 =head1 DATE
 
-June 06, 2002
+June 12, 2002
 
 =head1 AUTHOR
 
