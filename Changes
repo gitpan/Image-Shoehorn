@@ -1,5 +1,9 @@
 Revision history for Perl extension Image::Shoehorn
 
+1.41	Thu Aug 01 2002
+
+	- Added test in &scaled_dimensions to catch divide by zero errors
+
 1.4	Sun Jul 21 2002
 
 	- Added "dimensions_for_scale" package method; originally part of &_scale()

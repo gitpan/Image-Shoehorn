@@ -10,7 +10,7 @@ WriteMakefile(
 				 Image::Magick  => 5.45,
 				 Error          => 0,
 				 File::Basename => 0,
-
+				 Carp           => 0,
 				 # For test.pl
 				 Cwd => 0,
 				},

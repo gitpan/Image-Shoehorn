@@ -52,9 +52,11 @@ When I asked the Dict servers for a definition of "tailor", it returned a WordNe
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.4';
+$Image::Shoehorn::VERSION = '1.41';
 
 use File::Basename;
+
+use Carp;
 use Error;
 
 # use Data::Dumper;
@@ -165,6 +167,19 @@ sub scaled_dimensions {
   if (($width == $x) && ($height == $y)) {
     return ($x,$y);
   }
+
+  #
+
+  foreach ($width, $height, $x, $y) {
+    if ($_ < 1) {
+      carp "Dimension (width:$width, height:$height, x:$x, y:$y) less than one. ".
+	   "Returning 0,0 to avoid possible divide by zero error.\n";
+
+      return (0,0);
+    }
+  }
+
+  #
 
   my $h_percentage = $y / $height;
   my $w_percentage = $x / $width;
@@ -805,11 +820,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.4
+1.41
 
 =head1 DATE
 
-July 21, 2002
+August 01, 2002
 
 =head1 AUTHOR
 
