@@ -17,12 +17,16 @@ Apache::ImageShoehorn - mod_perl wrapper for Image::Shoehorn
    PerlSetVar	SetScaleLarge	75%
    PerlSetVar	SetScaleThumb	x50
 
+   PerlSetVar   SetValid        png
+   PerlSetVar   Convert         On
+
    <FilesMatch "\.html$">
     # Do something with HTML files here
    </FilesMatch>
   </Directory>
 
-  #
+  # This image would actually be converted and
+  # sent to the browser as a PNG file. Woot!
 
   http://www.foo.com/images/bar.jpg?scale=medium
 
@@ -54,6 +58,36 @@ If a scaled image already exists, it will not be rescaled until the lastmodified
 
 Valid dimensions are identical as those listed in I<Image::Shoehorn>.
 
+=item *
+
+SetValid       I<string>
+
+Define one or more file types that are considered valid for sending to the browser, notwithstanding any issues of scaling, "as-is".
+
+=item *
+
+Convert        I<(On|Off)>
+
+If an image fails a validity test, then the image will be be converted using the first type defined by the I<SetValid> configs that the package (read: Image::Magick) can understand.
+
+=back
+
+This package does not support all of the options available to the I<Image::Shoehorn> constructor. They will likely be added in later releases. The current list of unsupported configuration options is :
+
+=over
+
+=item *
+
+I<max_height>
+
+=item *
+
+I<max_width>
+
+=item *
+
+I<overwrite>
+
 =back
 
 =cut
@@ -61,14 +95,14 @@ Valid dimensions are identical as those listed in I<Image::Shoehorn>.
 package Apache::ImageShoehorn;
 use strict;
 
-$Apache::ImageShoehorn::VERSION = '0.9';
+$Apache::ImageShoehorn::VERSION = '0.9.1';
 
 use Apache;
 use Apache::Constants qw (:common);
 use Apache::File;
 use Apache::Log;
 
-use Image::Shoehorn 1.1;
+use Image::Shoehorn 1.2;
 
 my %TYPES   = ();
 my @FORMATS = ();
@@ -76,56 +110,145 @@ my @FORMATS = ();
 sub handler {
     my $apache = shift;
 
+    # First we make sure that we are dealing
+    # with a file we can understand.
+
     unless (&_valid_type($apache)) {
       return DECLINED;
     }
 
-    #
+    # Check to see if need to deal with
+    # validation and conversion.
+
+    my $valid   = 1;
+    my $convert = 0;
+
+    if ($apache->dir_config("SetValid")) {
+      my $ctype = $apache->content_type();
+      my @valid = $apache->dir_config->get("SetValid");
+
+      $valid = grep /^($ctype)$/,@valid;
+
+      if (! $valid) {
+	$convert = $apache->dir_config("Convert") =~ /^(on)$/i;
+      }
+    }
+
+    if ((! $valid) && (! $convert)) {
+      return NOT_FOUND;
+    }
+
+    # Pull in some query parameters for optional scaling.
 
     my %params = ($apache->method() eq "POST") ? $apache->content() : $apache->args();
     my $sname  = $params{"scale"};
 
+    # If we're neither scaling nor converting an
+    # image, our work here is done. These are not
+    # the droids we are looking for.
+
     my $scale = $apache->dir_config("SetScale".(ucfirst $sname));
-    if (! $scale) { return DECLINED; }
 
-    #
+    if (($sname) && (! $scale)) { 
+      return NOT_FOUND; 
+    }
 
-    my $source = $apache->filename();
-    my $mtime  = (stat($source))[9];
+    # What is the name of the file we're dealing with?
 
-    #
+    my $source    = $apache->filename();
+    my $converted = undef;
 
-    my $scaled = &_scalepath($apache,[$source,$sname]);
+    # Sooner or later, we're going to need this 
+    #  we'll define it now.
+
+    my $shoehorn = undef;
+
+    # The source file does not have a valid type 
+    # so we need to set up some details for converting
+    # it.
+
+    if ($convert) {
+
+      $shoehorn = &_shoehorn($apache)
+	|| return &_shoeless($apache);
+
+      # Can Image::Shoehorn deal with making
+      # this into that?
+
+      my $validation = $shoehorn->_validate({valid=>[$apache->dir_config->get("SetValid")]});
+
+      # No.
+
+      if (! $validation->[0]) {
+	$apache->log()->error("Failed validation.");
+	return SERVER_ERROR;
+      }
+
+      # Define the filename for the converted image.
+
+      $converted = Image::Shoehorn->converted_name([$source,$validation->[1]]);
+    }
+
+    # We add some additional information to the path name
+    # largely to try and idiot-proof things for humans.
+
+    my $scaled = &_scalepath($apache,[($converted || $source),$sname]);
+
+    # When was the source file last modified?
+
+    my $mtime = (stat($source))[9];
+
+    # If the source file hasn't been modified 
+    # and the scale file already exists (okay, so
+    # the function name is a bit of a misnomer)
+    # then our work is done and we can send the 
+    # scale file.
 
     if (! &_modified([$mtime,$scaled])) {
+
+      if ($convert) { $source = $converted; }
+
       $apache->register_cleanup(sub { &_scaleall($apache,undef,$source,$mtime); });
       return &_send($apache,{path=>$scaled});
     }
 
-    #
+    # If we haven't had to deal with converting files 
+    # then we still need to instantiate an Image::Shoehorn
+    # object
 
-    my $shoehorn = &_shoehorn($apache);
+    $shoehorn ||= &_shoehorn($apache)
+      || return &_shoeless($apache);
 
-    if (! $shoehorn) {
-      $apache->log()->error("Unable to create Image::Shoehorn object :".
-			    Image::Shoehorn->last_error());
+    # Now we finally get around to scaling the image
+
+    my ($imgs,$err) = &_scale($apache,$shoehorn,$source,$sname,$scale);
+
+    # Something went wrong.
+
+    if (! $imgs) {
+      $apache->log()->error("Unable to scale '$source' : $err");
       return SERVER_ERROR;
     }
 
-    #
+    # Fly away!
 
-    my ($imgs,$err) = &_scale($shoehorn,$source,$sname,$scale);
+    $apache->register_cleanup(sub { &_scaleall($apache,$shoehorn,$imgs->{'source'}->{'path'},$mtime); });
 
-    if (! $imgs) {
-	$apache->log()->error("Unable to scale : $err");
-	return NOT_FOUND;
-    }
+    # Note the $sname || "source" conditional.
+    # If we're sending the actual source file,
+    # we should never gotten this far anyway so
+    # we're going to assume that the only reason
+    # is because we need to convert the image,
+    # scale the image or both. If we need to scale
+    # the image then, all we can fetch the new file
+    # via $sname. If we have converted the image
+    # unscaled, then it will have been assigned the 
+    # magic 'source' title because the mod_perl wrapper
+    # doesn't pay any attention (yet, anyway) to the 
+    # 'overwrite' attribute in the Image::Shoehorn 
+    # constructor.
 
-    #
-    
-    $apache->register_cleanup(sub { &_scaleall($apache,$shoehorn,$source,$mtime); });
-
-    return &_send($apache,$imgs->{$sname});
+    return &_send($apache,$imgs->{($sname || "source")});
 }
 
 sub _shoehorn {
@@ -134,6 +257,15 @@ sub _shoehorn {
 			       tmpdir  => $apache->dir_config("ScaledDir"),
 			       cleanup => sub {},
 			      });
+}
+
+sub _shoeless {
+  my $apache = shift;
+
+  $apache->log()->error("Unable to create Image::Shoehorn object :".
+			Image::Shoehorn->last_error());
+
+  return SERVER_ERROR;
 }
 
 sub _send {
@@ -155,14 +287,18 @@ sub _send {
 }
 
 sub _scale {
+  my $apache   = shift;
   my $shoehorn = shift;
   my $source   = shift;
   my $name     = shift;
   my $scale    = shift;
 
   my $imgs = $shoehorn->import({
-				source => $source,
-				scale  => { $name => $scale },
+				source  => $source,
+				scale   => (($name) && ($scale)) ? { $name => $scale } : {},
+				convert => $apache->dir_config("Convert"),
+				valid   => (($apache->dir_config("SetValid")) ? 
+					    [ $apache->dir_config->get("SetValid") ] : undef),
 			       }) || return (0,Image::Shoehorn->last_error());
 
   return ($imgs,undef);
@@ -199,11 +335,14 @@ sub _scaleall {
     }
     
     if (! $shoehorn->import({
-			     source => $source,
-			     scale  => \%scales,
+			     source  => $source,
+			     scale   => \%scales,
+			     convert => $apache->dir_config("Convert"),
+			     valid   => (($apache->dir_config("SetValid")) ? 
+					 [ $apache->dir_config->get("SetValid") ] : undef),
 			    })) {
 
-      $apache->log()->error(Image::Shoehorn->last_error());
+      $apache->log()->error("Failed to import ".Image::Shoehorn->last_error());
       return 0;
     }
   }
@@ -218,16 +357,16 @@ sub _valid_type {
 
   if (! $2) { return 0; }
 
-  if (exists($TYPES{$2})) {
-    return $TYPES{$2};
+  if (exists($TYPES{$apache->location()}->{$2})) {
+    return $TYPES{$apache->location()}->{$2};
   }
 
   if (! @FORMATS) {
     @FORMATS = Image::Magick->QueryFormat();
   }
   
-  $TYPES{$2} = grep(/^($2)$/,@FORMATS);
-  return $TYPES{$2};
+  $TYPES{$apache->location()}->{$2} = grep(/^($2)$/,@FORMATS);
+  return $TYPES{$apache->location()}->{$2};
 }
 
 sub _scalepath {
@@ -256,29 +395,15 @@ sub _modified {
 
 =head1 VERSION
 
-0.9
+0.9.1
 
 =head1 DATE
 
-June 12, 2002
+June 17, 2002
 
 =head1 AUTHOR
 
 Aaron Straup Cope
-
-=head1 TO DO
-
-=over
-
-=item *
-
-Add hooks to allow for images to be be converted from one format to another. For example, a directory full of PhotoCD images would be sent to the browser as JPEGs.
-
-=item *
-
-Add hooks to store global I<TYPES> and I<FORMATS> data in a global hash keyed by the handler's location.
-
-=back
 
 =head1 SEE ALSO 
 

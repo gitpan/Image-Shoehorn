@@ -1,5 +1,19 @@
 Revision history for Perl extension Image::Shoehorn
 
+1.2	Mon Jun 17 2002
+
+	- Added "SetValid" and "Convert" config options to Apache::ImageShoehorn
+
+	- Added Image::Shoehorn->converted_name package method
+
+	- Update Apache::ImageShoehorn::_valid_type to attach handler
+	  location to global TYPES hash
+
+	- Fixed a bug in Image::Shoehorn::_validate where I was returning
+	  false instead of positive. Ack!
+
+	- Updated POD
+
 1.1	Mon Jun 10 2002
 
 	- Added Apache::ImageShoehorn

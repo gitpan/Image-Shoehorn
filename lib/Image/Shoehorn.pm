@@ -52,12 +52,12 @@ When I asked the Dict servers for a definition of "tailor", it returned a WordNe
 package Image::Shoehorn;
 use strict;
 
-$Image::Shoehorn::VERSION = '1.1';
+$Image::Shoehorn::VERSION = '1.2';
 
 use File::Basename;
-
 use Error;
-use Data::Dumper;
+
+# use Data::Dumper;
 
 use Image::Magick 5.45;
 
@@ -92,10 +92,28 @@ sub scaled_name {
 
   my $scaled = &basename($args->[0]);
 
-  $scaled =~ s/(.*)(\.[^\.]+)$/$1-$args->[1]$2/;
+  my $id = ($args->[1]) ? "-$args->[1]" : "";
+
+  $scaled =~ s/(.*)(\.[^\.]+)$/$1$id$2/;
   $scaled =~ s/%/percent/;
 
   return $scaled;
+}
+
+=head2 Image::Shoehorn->converted_name([$source,$type])
+
+=cut
+
+sub converted_name {
+  my $pkg  = shift;
+  my $args = shift;
+
+  if (! $args->[1]) { return $args->[0]; }
+
+  my $converted = $args->[0];
+  $converted    =~ s/^(.*)\.([^\.]+)$/$1\.$args->[1]/;
+
+  return $converted;
 }
 
 =head1 OBJECT METHODS
@@ -323,6 +341,8 @@ I<format>
 
 =back
 
+If there was an error, the method will return undef.
+
 =cut
 
 sub import {
@@ -333,17 +353,17 @@ sub import {
 
     if (! -e $args->{'source'}) {
       $self->last_error("Unknown file $args->{'source'}");
-      return 0;
+      return undef;
     }
 
     if (($args->{'cleanup'}) && (ref($args->{'cleanup'}) ne "CODE")) {
       $self->last_error("Cleanup is not a code reference.");
-      return 0;
+      return undef;
     }
 
     if (! $self->_magick()->Ping($args->{'source'})) {
       $self->last_error("Unable to ping $args->{'source'}: $!");
-      return 0;
+      return undef;
     }
 
     #
@@ -368,7 +388,7 @@ sub import {
     #
 
     if (! $self->_process($args)) {
-      return 0;
+      return undef;
     }
 
     #
@@ -376,7 +396,27 @@ sub import {
     my $validation = $self->_validate($args);
 
     if ((! $validation->[0]) && (! $validation->[1])) {
-      return 0;
+      return undef;
+    }
+
+    #
+
+    if (! keys %{$args->{'scale'}}) {
+
+      my $dest = ($args->{'overwrite'})? 
+	__PACKAGE__->converted_name([$self->{'__images'}{'source'}{'path'},$validation->[1]]) :
+	  "$self->{'__tmpdir'}/".&basename(__PACKAGE__->converted_name([$self->{'__images'}{'source'}{'path'},
+									$validation->[1]]));
+
+      my ($x,$y) = $self->_shoehorn({source => $self->{'__images'}{'source'}{'path'},
+				     dest   => $dest,
+				     type   => $validation->[1]});
+
+      if (! $x) {
+	return undef;
+      }
+
+      return {source=>$self->_ping($dest)};
     }
 
     #
@@ -390,7 +430,7 @@ sub import {
 			   scale => $args->{'scale'}->{$name},
 			   type  => $validation->[1],
 			  })) {
-	return 0;
+	return undef;
       }
     }
 
@@ -504,7 +544,7 @@ sub _validate {
     my $encode = ($self->_magick()->QueryFormat(format=>$type))[4];
 
     if ($encode) { 
-      $self->{'__validation'} = [0,$type];
+      $self->{'__validation'} = [1,$type];
       return $self->{'__validation'};
     }
   }
@@ -527,7 +567,7 @@ sub _scale {
   $scaled = "$self->{'__tmpdir'}/$scaled";
 
   if ($args->{'type'}) {
-    $scaled =~ s/^(.*)\.([^\.]+)$/$1\.$args->{'type'}/;
+    $scaled = __PACKAGE__->converted_name([$scaled,$args->{'type'}]);
   }
 
   my $width  = $self->{'__images'}{'source'}->{'width'};
@@ -580,8 +620,8 @@ sub _shoehorn {
   $args->{'source'} ||= $self->{'__source'};
   $args->{'dest'}   ||= $self->{'__dest'};
 
-  # my $caller = (caller(1))[3];
-  # print "Shoehorn ($caller):\n".&Dumper($args);
+#  my $caller = (caller(1))[3];
+#  print STDERR "Shoehorn ($caller):\n".&Dumper($args);
 
   #
 
@@ -743,11 +783,11 @@ sub DESTROY {
 
 =head1 VERSION
 
-1.1
+1.2
 
 =head1 DATE
 
-June 12, 2002
+June 17, 2002
 
 =head1 AUTHOR
 
